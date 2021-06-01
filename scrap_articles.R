@@ -1,55 +1,101 @@
-# tentando uma outra forma
-
 library(dplyr)
 library(rscielo)
 library(data.table)
 library(rvest)
 library(stringr)
+library(tidyr)
 
-setwd("C:\\Users\\yvfg3118\\Documents\\R Scripts\\tentativa 4")
-original <- fread("rev_humanas_scielo.csv", encoding="UTF-8")
+setwd("/Users/user/Documents/Scripts e notebooks/R scripts/scielo_conselhos")
+load("tabela_publicacoes.Rdata")
 
-rev_humanas <- original %>%
-  mutate(publi = paste0(link, "grid"))
+ano_minimo <- 1990
 
-## Comecando o loop da raspagem:TESTE
+# Eu vi que o máximo foram 8 numeros em um ano
+links_var <- c()
 
-# pegando o primeiro link de revista:
-# for(i in 1:nrow(rev_humanas)){
-# url <- rev_humanas[i,7]
-url <- 'https://www.scielo.br/j/bpsr/grid'
+for(u in 1:8){
+  z <- paste0("link", u)
+  links_var <- c(links_var,z)
+}
 
-# pegando cada um dos links de cada uma das edicoes da revista:
-webpage <- read_html(url)
-journals <- html_nodes(webpage, xpath='//*[@id="issueList"]/table/tbody/tr/td')  %>%
-  html_children() %>% 
-  html_attr("href")
+log_raspagem <- tabela_publicacoes %>%
+  mutate(ano = as.numeric(ano)) %>%
+  filter(ano >= ano_minimo) %>%
+  select(-c(numeros)) %>%
+  separate(link, into=links_var, sep = " ; " ) %>%
+  gather(edicao, link, links_var) %>%
+  filter(!is.na(link)) %>%
+  mutate(edicao = gsub("link", "", edicao),
+         link = paste0("https://www.scielo.br", link),
+         status = NA)
 
-journals <- paste0("https://www.scielo.br", journals)
+tabela_link_artigos <- data.frame(titulo = NA,
+                                  ano = NA,
+                                  edicao = NA,
+                                  link_edicao = NA,
+                                  artigos = NA)
 
-# Segundo loop: entre em cada um dos links do journal e raspe o arquivo:
-# for(u in 1:lenght(journals)){
-j <- journals[1]
+## 1:2000 / 2000 a n():
+#Raspagem do link dos artigos
+for(i in 1:nrow(log_raspagem)){
+  
+  j <- log_raspagem[i,4]
+  
+  print(c(i, j))
+  
+  tla <- data.frame(titulo = log_raspagem[i,1],
+                    ano = log_raspagem[i,2],
+                    edicao = log_raspagem[i,3],
+                    link_edicao = j,
+                    artigos = NA)
+  
+  tryCatch({webpagej <- read_html(j)
+  
+  articles <- html_nodes(webpagej, xpath='//*[@id="issueIndex"]/div[1]/div[2]/ul/li/ul/li/a')%>%
+    html_attr("href")
+  
+  articles <- articles[!str_detect(articles,pattern="pdf")]
+  articles <- articles[!str_detect(articles,pattern="abstract")]
+  articles <- paste0("https://www.scielo.br", articles)
+  articles <- str_c( articles ,collapse=' ; ') 
+  
+  tla[1,5] <- articles
+  
+  tabela_link_artigos <- rbind(tabela_link_artigos, tla)
+  
+  log_raspagem[i,5] <- "OK"}, 
+  error=function(e){} )
+  #funcao erro que nao faz nada
+}
 
-webpagej <- read_html(j)
+save(tabela_link_artigos, file="tabela_link_artigos.Rdata")
+# Verificar se algum log de raspagem deu erro
+# empilhar os links dos artigos
+# fazer a raspagem definitiva dos links dos artigos e colocar em uma lista
 
-articles <- html_nodes(webpagej, xpath='//*[@id="issueIndex"]/div[1]/div[2]/ul/li/ul/li/a')%>%
-  html_attr("href")
+
+##################################################################
+
+
+
+
+
+
 
 # mantendo só artigos em texto:
 
-articles <- articles[!str_detect(articles,pattern="pdf")]
-articles <- articles[!str_detect(articles,pattern="abstract")]
-articles <- paste0("https://www.scielo.br", articles)
+
 
 #terceiro loop: vá em cada um dos links do texto e salve os textos:
 #for(z in 1:lenght(articles)){}
 
 a <- articles[1]
 webpagea <- read_html(a)
-article_text <- html_nodes(webpagea, xpath='//*[@id="articleText"]/div[3]/p') 
+article_text <- html_nodes(webpagea, xpath='//*[@id="articleText"]/div[3]/p') %>%
+  html_text(trim=TRUE)
 
+article_text <- str_c( article_text ,collapse=' ') 
 
-article_text
-## ONDE PAREI. EU CONSIGO PEGAR O TEXTO MAS AINDA NAO CONSIGO TRABALHAR COM ESSE HTML
-# COMO SE ELE FOSSE TEXTO; PRECISO OLHAR NO RVEST PARA SABER COMO PEGAR TODO O TEXTO:
+#Texto inteiro está aqui!
+#inserir texto em uma lista
+article_list[1] <- article_text
